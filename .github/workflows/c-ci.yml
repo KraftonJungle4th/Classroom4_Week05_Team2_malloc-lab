@@ -1,0 +1,28 @@
+name: C CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+  
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Install GCC
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential
+        # 여기에 C 프로젝트에 필요한 추가 종속성을 설치
+        sudo apt-get install valgrind
+
+    - name: Build project
+      run: make
+
+    - name: Run tests
+      run: ./mdriver
