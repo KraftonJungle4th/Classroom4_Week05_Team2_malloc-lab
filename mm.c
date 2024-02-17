@@ -44,34 +44,49 @@ team_t team = {
 
 // ----- KJ -----
 
-/* Basic constants and macros */
-#define WSIZE 4             /* Word and header/footer size (bytes) */
-#define DSIZE 8             /* Double word size (bytes) */
-#define CHUNKSIZE (1 << 12) /* Extend heap by this amount (bytes) */
+/* 가용리스트 조작 매크로*/
+#define WSIZE 4             /* 워드 크기 */
+#define DSIZE 8             /* 더블워드 크기 */
+#define CHUNKSIZE (1 << 12) /* 2의 12승 비트연산 (4096) */
 
 #define MAX(x, y) ((x) > (y) ? (x) : (y))
 
-/* Pack a size and allocated bit into a word */
+/* 크기와 할당 비트를 통합해서 헤더와 풋터에 저장할 수 있는 값을 리턴 */
 #define PACK(size, alloc) ((size) | (alloc))
 
-/* Read and write a word at address p */
+/* 인자 p가 참조하는 워드를 읽어서 리턴, 인자 p가 가르키는 워드에 val을 저장*/
 #define GET(p) (*(unsigned int *)(p))
 #define PUT(p, val) (*(unsigned int *)(p) = (val))
 
-/* Read the size and allocated fields from address p */
+/* 주소 p에 있는 헤더 또는 풋터의 size와 리턴한다. p의 메모리 블록의 크기를 추출하기위해 사용,
+ 주소 p에 있는 헤더 또는 풋터의 할당비트를 리턴한다. p의 메모리블록 할당여부를 확인하기위해 사용*/
 #define GET_SIZE(p) (GET(p) & ~0x7)
 #define GET_ALLOC(p) (GET(p) & 0x1)
 
-/* Given block ptr bp, compute address of its header and footer */
+
+/* 블록 헤더를 가리키는 포인터를 리턴 -> 데이터의 시작주소에서 헤더의 크기인 4바이트를 빼서 헤더의 시작주소를 나타냄
+블록 풋터를 가리키는 포인터를 리턴 -> 데이터의 시작주소에서 헤더에 저장된 크기를 더해서 8바이트를 뺴서 푸터의 시작주소를 나타냄
+헤더의 시작주소가 아닌 데이터의 시작주소 부터 시작해서 8바이트를 뺸다.*/
 #define HDRP(bp) ((char *)(bp)-WSIZE)
 #define FTRP(bp) ((char *)(bp) + GET_SIZE(HDRP(bp)) - DSIZE)
 
-/* Given block ptr bp, compute address of next and previous blocks */
+/* 다음 블록의 페이로드 시작 포인터를 리턴
+이전 블록의 페이로드 시작 포인터를 리턴 */
 #define NEXT_BLKP(bp) ((char *)(bp) + GET_SIZE(((char *)(bp)-WSIZE)))
 #define PREV_BLKP(bp) ((char *)(bp)-GET_SIZE(((char *)(bp)-DSIZE)))
 
 // ----- ** -----
-
+static void *coalesce(void *bp); // 인접하는 가용 블록들을 병합하고 단일 블록으로 만듦
+static void *extend_heap(size_t words); // 힙을 확장
+static void *heap_listp; // 가용리스트의 시작을 나타내는 포인터
+int mm_init(void); // 메모리 시스템 초기화, 초기 빈 가용리스트 생성
+void *mm_malloc(size_t size); // 요청된 크기의 메모리 블록을 할당
+void mm_free(void *ptr); // 이전에 할당된 메모리 블록을 해제, 블록을 가용 리스트에 추가
+void *mm_realloc(void *ptr, size_t size); // 이전에 할당된 메모리 블록의 크기를 조정하거나 새로운 위치로 메모리 이동
+static void *find_fit(size_t asize); // 요청된 크기에 맞는 가용 블록 탐색
+static void *find_nextp; // 다음 가용 블록을 탐색하기 위한 포인터
+static void *next_fit(size_t asize); // 다음 가용 블록을 찾을 때 현재 위치를 기준으로 탐색
+static void place(void *bp, size_t aszie); // 할당된 메모리 블록을 가용 리스트에서 제거하고 요청된 크기로 분할
 // ----- KJ -----
 
 static void *coalesce(void *bp)
@@ -134,8 +149,6 @@ static void *extend_heap(size_t words)
     return coalesce(bp);
 }
 
-void *heap_listp = NULL;
-
 // ----- ** -----
 
 /*
@@ -145,15 +158,16 @@ void *heap_listp = NULL;
 int mm_init(void)
 {
     /* Create the initial empty heap */
-    if ((heap_listp = mem_sbrk(4 * WSIZE)) == (void *)-1)
-        return -1;
+    //mem_sbrk 는 리눅스 시스템에서 sbrk로 대체할 수 있다. mem_sbrk는 다양한 운영체제에서 사용한다.
+    if ((heap_listp = mem_sbrk(4 * WSIZE)) == (void *)-1) //초기 메모리 블록을 요청하고 그결과를 heap_listp에 할당한다.
+        return -1; // 할당에 실패하면 (void *)-1를 반환하는데 반환값과 (void *)-1를 비교해서 할당실패이면 -1을 반환한다.
 
-    PUT(heap_listp, 0);                            /* Alignment padding */
-    PUT(heap_listp + (1 * WSIZE), PACK(DSIZE, 1)); /* Prologue header */
-    PUT(heap_listp + (2 * WSIZE), PACK(DSIZE, 1)); /* Prologue footer */
-    PUT(heap_listp + (3 * WSIZE), PACK(0, 1));     /* Epilogue header */
-    heap_listp += (2 * WSIZE);
-
+    PUT(heap_listp, 0);                            
+    PUT(heap_listp + (1 * WSIZE), PACK(DSIZE, 1)); //헤더로 구성된 8바이트 블록
+    PUT(heap_listp + (2 * WSIZE), PACK(DSIZE, 1)); //푸터로 구성된 8바이트 블록
+    PUT(heap_listp + (3 * WSIZE), PACK(0, 1));     //에필로그 블록 크기가 0
+    heap_listp += (2 * WSIZE);                     //프롤로그 블록과 에필로그 블록 사이 힙의 시작 주소를 나타냄
+    find_nextp = heap_listp; // next_fit을 사용할 떄 필요한 변수
     /* Extend the empty heap with a free block of CHUNKSIZE bytes */
     if (extend_heap(CHUNKSIZE / WSIZE) == NULL)
         return -1;
