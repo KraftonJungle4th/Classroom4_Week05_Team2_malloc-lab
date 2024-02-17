@@ -24,11 +24,11 @@
  ********************************************************/
 team_t team = {
     /* Team name */
-    "ateam",
+    "Classroom4_Week05_Team2_malloc-lab",
     /* First member's full name */
-    "Harry Bovik",
+    "KraftonJungle4th",
     /* First member's email address */
-    "bovik@cs.cmu.edu",
+    "jungle@krafton.com",
     /* Second member's full name (leave blank if none) */
     "",
     /* Second member's email address (leave blank if none) */
@@ -60,9 +60,8 @@ team_t team = {
 
 /* 주소 p에 있는 헤더 또는 풋터의 size와 리턴한다. p의 메모리 블록의 크기를 추출하기위해 사용,
  주소 p에 있는 헤더 또는 풋터의 할당비트를 리턴한다. p의 메모리블록 할당여부를 확인하기위해 사용*/
-#define GET_SIZE(p) (GET(p) & ~0x7)
+#define GET_SIZE(p) (GET(p) & ~0x7) // 반전 연산자 ~
 #define GET_ALLOC(p) (GET(p) & 0x1)
-
 
 /* 블록 헤더를 가리키는 포인터를 리턴 -> 데이터의 시작주소에서 헤더의 크기인 4바이트를 빼서 헤더의 시작주소를 나타냄
 블록 풋터를 가리키는 포인터를 리턴 -> 데이터의 시작주소에서 헤더에 저장된 크기를 더해서 8바이트를 뺴서 푸터의 시작주소를 나타냄
@@ -76,16 +75,16 @@ team_t team = {
 #define PREV_BLKP(bp) ((char *)(bp)-GET_SIZE(((char *)(bp)-DSIZE)))
 
 // ----- ** -----
-static void *coalesce(void *bp); // 인접하는 가용 블록들을 병합하고 단일 블록으로 만듦
-static void *extend_heap(size_t words); // 힙을 확장
-static void *heap_listp; // 가용리스트의 시작을 나타내는 포인터
-int mm_init(void); // 메모리 시스템 초기화, 초기 빈 가용리스트 생성
-void *mm_malloc(size_t size); // 요청된 크기의 메모리 블록을 할당
-void mm_free(void *ptr); // 이전에 할당된 메모리 블록을 해제, 블록을 가용 리스트에 추가
-void *mm_realloc(void *ptr, size_t size); // 이전에 할당된 메모리 블록의 크기를 조정하거나 새로운 위치로 메모리 이동
-static void *find_fit(size_t asize); // 요청된 크기에 맞는 가용 블록 탐색
-static void *find_nextp; // 다음 가용 블록을 탐색하기 위한 포인터
-static void *next_fit(size_t asize); // 다음 가용 블록을 찾을 때 현재 위치를 기준으로 탐색
+static void *coalesce(void *bp);           // 인접하는 가용 블록들을 병합하고 단일 블록으로 만듦
+static void *extend_heap(size_t words);    // 힙을 확장
+static void *heap_listp;                   // 가용리스트의 시작을 나타내는 포인터
+int mm_init(void);                         // 메모리 시스템 초기화, 초기 빈 가용리스트 생성
+void *mm_malloc(size_t size);              // 요청된 크기의 메모리 블록을 할당
+void mm_free(void *ptr);                   // 이전에 할당된 메모리 블록을 해제, 블록을 가용 리스트에 추가
+void *mm_realloc(void *ptr, size_t size);  // 이전에 할당된 메모리 블록의 크기를 조정하거나 새로운 위치로 메모리 이동
+static void *find_fit(size_t asize);       // 요청된 크기에 맞는 가용 블록 탐색
+static void *find_nextp;                   // 다음 가용 블록을 탐색하기 위한 포인터
+static void *next_fit(size_t asize);       // 다음 가용 블록을 찾을 때 현재 위치를 기준으로 탐색
 static void place(void *bp, size_t aszie); // 할당된 메모리 블록을 가용 리스트에서 제거하고 요청된 크기로 분할
 // ----- KJ -----
 
@@ -134,18 +133,18 @@ static void *extend_heap(size_t words)
     char *bp;
     size_t size;
 
-    /* Allocate an even number of words to maintain alignment */
+    // 확장할 크기를 정렬 요구 사항에 맞게 조정
     size = (words % 2) ? (words + 1) * WSIZE : words * WSIZE;
 
     if ((long)(bp = mem_sbrk(size)) == -1)
         return NULL;
 
-    /* Initialize free block header/footer and the epilogue header */
-    PUT(HDRP(bp), PACK(size, 0));         /* Free block header */
-    PUT(FTRP(bp), PACK(size, 0));         /* Free block footer */
-    PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1)); /* New epilogue header */
+    // 새로 확장된 영역의 프리 블록 헤더와 푸터, 그리고 새 에필로그 헤더 초기화
+    PUT(HDRP(bp), PACK(size, 0));         // 프리 블록 헤더
+    PUT(FTRP(bp), PACK(size, 0));         // 프리 블록 푸터
+    PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1)); // 새 에필로그 헤더
 
-    /* Coalesce if the previous block was free */
+    // 인접한 프리 블록과의 병합을 시도하여 메모리 단편화 감소
     return coalesce(bp);
 }
 
@@ -155,19 +154,21 @@ static void *extend_heap(size_t words)
  * mm_init - initialize the malloc package.
  */
 
+// ----- KJ -----
+
 int mm_init(void)
 {
     /* Create the initial empty heap */
-    //mem_sbrk 는 리눅스 시스템에서 sbrk로 대체할 수 있다. mem_sbrk는 다양한 운영체제에서 사용한다.
-    if ((heap_listp = mem_sbrk(4 * WSIZE)) == (void *)-1) //초기 메모리 블록을 요청하고 그결과를 heap_listp에 할당한다.
-        return -1; // 할당에 실패하면 (void *)-1를 반환하는데 반환값과 (void *)-1를 비교해서 할당실패이면 -1을 반환한다.
+    // mem_sbrk 는 리눅스 시스템에서 sbrk로 대체할 수 있다. mem_sbrk는 다양한 운영체제에서 사용한다.
+    if ((heap_listp = mem_sbrk(4 * WSIZE)) == (void *)-1) // 초기 메모리 블록을 요청하고 그결과를 heap_listp에 할당한다.
+        return -1;                                        // 할당에 실패하면 (void *)-1를 반환하는데 반환값과 (void *)-1를 비교해서 할당실패이면 -1을 반환한다.
 
-    PUT(heap_listp, 0);                            
-    PUT(heap_listp + (1 * WSIZE), PACK(DSIZE, 1)); //헤더로 구성된 8바이트 블록
-    PUT(heap_listp + (2 * WSIZE), PACK(DSIZE, 1)); //푸터로 구성된 8바이트 블록
-    PUT(heap_listp + (3 * WSIZE), PACK(0, 1));     //에필로그 블록 크기가 0
-    heap_listp += (2 * WSIZE);                     //프롤로그 블록과 에필로그 블록 사이 힙의 시작 주소를 나타냄
-    find_nextp = heap_listp; // next_fit을 사용할 떄 필요한 변수
+    PUT(heap_listp, 0);
+    PUT(heap_listp + (1 * WSIZE), PACK(DSIZE, 1)); // 헤더로 구성된 8바이트 블록
+    PUT(heap_listp + (2 * WSIZE), PACK(DSIZE, 1)); // 푸터로 구성된 8바이트 블록
+    PUT(heap_listp + (3 * WSIZE), PACK(0, 1));     // 에필로그 블록 크기가 0
+    heap_listp += (2 * WSIZE);                     // 프롤로그 블록과 에필로그 블록 사이 힙의 시작 주소를 나타냄
+    find_nextp = heap_listp;                       // next_fit을 사용할 떄 필요한 변수
     /* Extend the empty heap with a free block of CHUNKSIZE bytes */
     if (extend_heap(CHUNKSIZE / WSIZE) == NULL)
         return -1;
@@ -175,60 +176,83 @@ int mm_init(void)
     return 0;
 }
 
+// ----- ** -----
+
+// ----- KJ -----
+
+static void *find_fit(size_t asize)
+{
+    /* First-fit search */
+    void *bp;
+
+    for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp))
+    {
+        if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp))))
+        {
+            return bp;
+        }
+    }
+
+    return NULL; /* No fit */
+}
+
+static void place(void *bp, size_t asize)
+{
+    size_t csize = GET_SIZE(HDRP(bp));
+
+    if ((csize - asize) >= (2 * DSIZE))
+    {
+        PUT(HDRP(bp), PACK(asize, 1));
+        PUT(FTRP(bp), PACK(asize, 1));
+        bp = NEXT_BLKP(bp);
+        PUT(HDRP(bp), PACK(csize - asize, 0));
+        PUT(FTRP(bp), PACK(csize - asize, 0));
+    }
+    else
+    {
+        PUT(HDRP(bp), PACK(csize, 1));
+        PUT(FTRP(bp), PACK(csize, 1));
+    }
+}
+
 /*
  * mm_malloc - Allocate a block by incrementing the brk pointer.
  *     Always allocate a block whose size is a multiple of the alignment.
  */
+
 void *mm_malloc(size_t size)
 {
-    int newsize = ALIGN(size + SIZE_T_SIZE);
-    void *p = mem_sbrk(newsize);
+    size_t asize;      /* Adjusted block size */
+    size_t extendsize; /* Amount to extend heap if no fit */
+    char *bp;
 
-    if (p == (void *)-1)
+    /* Ignore spurious requests */
+    if (size == 0)
         return NULL;
+
+    /* Adjust block size to include overhead and alignment reqs. */
+    if (size <= DSIZE)
+        asize = 2 * DSIZE;
     else
+        asize = DSIZE * ((size + (DSIZE) + (DSIZE - 1)) / DSIZE);
+
+    /* Search the free list for a fit */
+    if ((bp = find_fit(asize)) != NULL)
     {
-        *(size_t *)p = size;
-        return (void *)((char *)p + SIZE_T_SIZE);
+        place(bp, asize);
+        return bp;
     }
+
+    /* No fit found. Get more memory and place the block */
+    extendsize = MAX(asize, CHUNKSIZE);
+
+    if ((bp = extend_heap(extendsize / WSIZE)) == NULL)
+        return NULL;
+
+    place(bp, asize);
+
+    return bp;
 }
-
-//
-
-// ----- KJ -----
-
-// void *mm_malloc(size_t size)
-// {
-//     size_t asize;      /* Adjusted block size */
-//     size_t extendsize; /* Amount to extend heap if no fit */
-//     char *bp;
-
-//     /* Ignore spurious requests */
-//     if (size == 0)
-//         return NULL;
-
-//     /* Adjust block size to include overhead and alignment reqs. */
-//     if (size <= DSIZE)
-//         asize = 2 * DSIZE;
-//     else
-//         asize = DSIZE * ((size + (DSIZE) + (DSIZE - 1)) / DSIZE);
-
-//     /* Search the free list for a fit */
-//     // if ((bp = find_fit(asize)) != NULL)
-//     // {
-//     //     place(bp, asize);
-//     //     return bp;
-//     // }
-
-//     /* No fit found. Get more memory and place the block */
-//     extendsize = MAX(asize, CHUNKSIZE);
-
-//     if ((bp = extend_heap(extendsize / WSIZE)) == NULL)
-//         return NULL;
-
-//     // place(bp, asize);
-//     return bp;
-// }
 
 // ----- ** -----
 
@@ -248,24 +272,35 @@ void mm_free(void *ptr)
 /*
  * mm_realloc - Implemented simply in terms of mm_malloc and mm_free
  */
+
+// ----- KJ -----
+
 void *mm_realloc(void *ptr, size_t size)
 {
     void *oldptr = ptr;
     void *newptr;
     size_t copySize;
 
+    // 새로운 메모리 블록 할당
     newptr = mm_malloc(size);
 
     if (newptr == NULL)
         return NULL;
 
-    copySize = *(size_t *)((char *)oldptr - SIZE_T_SIZE);
+    // 이전 블록의 데이터 크기를 가져옴
+    copySize = GET_SIZE(HDRP(oldptr));
 
+    // 실제 복사할 데이터 크기는 이전 블록 크기와 요청된 새 블록 크기 중 작은 값
     if (size < copySize)
         copySize = size;
 
+    // 데이터를 새 블록으로 복사
     memcpy(newptr, oldptr, copySize);
+
+    // 이전 블록 해제
     mm_free(oldptr);
 
     return newptr;
 }
+
+// ----- ** -----
