@@ -35,57 +35,55 @@ team_t team = {
     ""};
 
 /* single word (4) or double word (8) alignment */
-#define ALIGNMENT 8
+#define ALIGNMENT 8 // 정렬을 위한 상수를 정의(8바이트로 정렬을 하겠다.)
 
 /* rounds up to the nearest multiple of ALIGNMENT */
-#define ALIGN(size) (((size) + (ALIGNMENT - 1)) & ~0x7)
+#define ALIGN(size) (((size) + (ALIGNMENT - 1)) & ~0x7) // 주어진 크기를 정렬에 맞게 조정하는 매크로
 
-#define SIZE_T_SIZE (ALIGN(sizeof(size_t)))
+#define SIZE_T_SIZE (ALIGN(sizeof(size_t))) // 자료형의 크기를 정렬에 맞게 조정하는 매크로
 
 // ----- KJ -----
 
-/* 가용리스트 조작 매크로*/
-#define WSIZE 4             /* 워드 크기 */
-#define DSIZE 8             /* 더블워드 크기 */
-#define CHUNKSIZE (1 << 12) /* 2의 12승 비트연산 (4096) */
+#define WSIZE 4 // 워드의 크기를 바이트 단위로 정의
+#define DSIZE 8 // 더블 워드의 크기를 바이트 단위로 정의
+#define CHUNKSIZE (1 << 12) // 초기 힙 확장에 사용되는 정크 크기를 정의 [2의 12승 (4096)]
 
+/*주어진 두 값 중 큰 값을 반환하는 매크로*/
 #define MAX(x, y) ((x) > (y) ? (x) : (y))
-
-/* 크기와 할당 비트를 통합해서 헤더와 풋터에 저장할 수 있는 값을 리턴 */
+/*메모리 블록의 크기와 할당 비트를 결합하여 헤더 및 풋터에 저장할 값을 반환하는 매크로*/
 #define PACK(size, alloc) ((size) | (alloc))
-
-/* 인자 p가 참조하는 워드를 읽어서 리턴, 인자 p가 가르키는 워드에 val을 저장*/
+ 
+/*p가 가리키는 메모리를 unsigned int로 캐스팅한 뒤 해당 위치의 값을 반환
+p가 가리키는 메모리를 unsigned int로 캐스팅한 뒤 해당 위치에 val값을 저장 */
 #define GET(p) (*(unsigned int *)(p))
 #define PUT(p, val) (*(unsigned int *)(p) = (val))
 
-/* 주소 p에 있는 헤더 또는 풋터의 size와 리턴한다. p의 메모리 블록의 크기를 추출하기위해 사용,
- 주소 p에 있는 헤더 또는 풋터의 할당비트를 리턴한다. p의 메모리블록 할당여부를 확인하기위해 사용*/
-#define GET_SIZE(p) (GET(p) & ~0x7) // 반전 연산자 ~
+/*주소 p에 있는 헤더 또는 풋터의 크기를 반환, 할당 비트를 제외하고 나머지 비트를 반환
+주소 p에 있는 헤더 또는 풋터의 할당 비트를 반환, 할당 상태를 나타냄*/
+#define GET_SIZE(p) (GET(p) & ~0x7)
 #define GET_ALLOC(p) (GET(p) & 0x1)
 
-/* 블록 헤더를 가리키는 포인터를 리턴 -> 데이터의 시작주소에서 헤더의 크기인 4바이트를 빼서 헤더의 시작주소를 나타냄
-블록 풋터를 가리키는 포인터를 리턴 -> 데이터의 시작주소에서 헤더에 저장된 크기를 더해서 8바이트를 뺴서 푸터의 시작주소를 나타냄
-헤더의 시작주소가 아닌 데이터의 시작주소 부터 시작해서 8바이트를 뺸다.*/
+/*주어진 블록 포인터 bp에 대한 헤더 주소를 반환, 주소 bp에서 워드 크기만큼 뺀 주소를 반환
+헤더 주소에서 해당 블록의 크기를 구한 뒤 더블 워드 크기를 배서 풋터의 주소를 반환*/
 #define HDRP(bp) ((char *)(bp)-WSIZE)
 #define FTRP(bp) ((char *)(bp) + GET_SIZE(HDRP(bp)) - DSIZE)
 
-/* 다음 블록의 페이로드 시작 포인터를 리턴
-이전 블록의 페이로드 시작 포인터를 리턴 */
+/*현재 블록의 이전 블록 헤더로부터 크기를 읽어와 현재 블록의 끝 주소 다음을 반환
+현재 블록의 이전 블록의 풋터로부터 크기를 읽어와 이전 블록의 시작 주소를 반환*/
 #define NEXT_BLKP(bp) ((char *)(bp) + GET_SIZE(((char *)(bp)-WSIZE)))
 #define PREV_BLKP(bp) ((char *)(bp)-GET_SIZE(((char *)(bp)-DSIZE)))
 
 // ----- ** -----
-static void *coalesce(void *bp);           // 인접하는 가용 블록들을 병합하고 단일 블록으로 만듦
-static void *extend_heap(size_t words);    // 힙을 확장
-static void *heap_listp;                   // 가용리스트의 시작을 나타내는 포인터
-int mm_init(void);                         // 메모리 시스템 초기화, 초기 빈 가용리스트 생성
-void *mm_malloc(size_t size);              // 요청된 크기의 메모리 블록을 할당
-void mm_free(void *ptr);                   // 이전에 할당된 메모리 블록을 해제, 블록을 가용 리스트에 추가
-void *mm_realloc(void *ptr, size_t size);  // 이전에 할당된 메모리 블록의 크기를 조정하거나 새로운 위치로 메모리 이동
-static void *find_fit(size_t asize);       // 요청된 크기에 맞는 가용 블록 탐색
-static void *find_nextp;                   // 다음 가용 블록을 탐색하기 위한 포인터
-static void *next_fit(size_t asize);       // 다음 가용 블록을 찾을 때 현재 위치를 기준으로 탐색
-static void place(void *bp, size_t aszie); // 할당된 메모리 블록을 가용 리스트에서 제거하고 요청된 크기로 분할
+static void *coalesce(void *bp);           // 주변의 가용 블록을 병합하여 하나의 블록으로 만드는 함수를 선언
+static void *extend_heap(size_t words);    // 힙을 확장하는 함수를 선언
+static void *heap_listp;                   // 가용 리스트의 시작을 나타내는 포인터
+int mm_init(void);                         // 메모리 할당 시스템을 초기화하는 함수를 선언
+static void *find_fit(size_t asize);       // 요청된 크기에 맞는 가용 블록을 탐색하는 함수를 선언
+static void place(void *bp, size_t aszie); // 할당된 메모리 블록을 가용 리스트에서 제거하고 요청된 크기로 분할하는 함수를 선언
+void *mm_malloc(size_t size);              // 주어진 크기의 메모리 블록을 할당하는 함수를 선언
+void mm_free(void *ptr);                   // 이전에 할당된 메모리 블록을 해제하는 함수를 선언
+void *mm_realloc(void *ptr, size_t size);  // 이전에 할당된 메모리 블록의 크기를 조정하거나 새로운 위치로 메모리를 이동하는 함수를 선언
+static void *find_nextp;                   // 다음 가용 블록을 탐색하기 위한 포인터 (next_fit)
 // ----- KJ -----
 
 static void *coalesce(void *bp)
@@ -120,7 +118,7 @@ static void *coalesce(void *bp)
         PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
         bp = PREV_BLKP(bp);
     }
-
+    find_nextp = bp;
     return bp;
 }
 
@@ -158,19 +156,17 @@ static void *extend_heap(size_t words)
 
 int mm_init(void)
 {
-    /* Create the initial empty heap */
-    // mem_sbrk 는 리눅스 시스템에서 sbrk로 대체할 수 있다. mem_sbrk는 다양한 운영체제에서 사용한다.
-    if ((heap_listp = mem_sbrk(4 * WSIZE)) == (void *)-1) // 초기 메모리 블록을 요청하고 그결과를 heap_listp에 할당한다.
-        return -1;                                        // 할당에 실패하면 (void *)-1를 반환하는데 반환값과 (void *)-1를 비교해서 할당실패이면 -1을 반환한다.
+    if ((heap_listp = mem_sbrk(4 * WSIZE)) == (void *)-1) // 초기 힙 메모리를 할당
+        return -1;
 
-    PUT(heap_listp, 0);
-    PUT(heap_listp + (1 * WSIZE), PACK(DSIZE, 1)); // 헤더로 구성된 8바이트 블록
-    PUT(heap_listp + (2 * WSIZE), PACK(DSIZE, 1)); // 푸터로 구성된 8바이트 블록
-    PUT(heap_listp + (3 * WSIZE), PACK(0, 1));     // 에필로그 블록 크기가 0
-    heap_listp += (2 * WSIZE);                     // 프롤로그 블록과 에필로그 블록 사이 힙의 시작 주소를 나타냄
-    find_nextp = heap_listp;                       // next_fit을 사용할 떄 필요한 변수
-    /* Extend the empty heap with a free block of CHUNKSIZE bytes */
-    if (extend_heap(CHUNKSIZE / WSIZE) == NULL)
+    PUT(heap_listp, 0);                            // 힙의 시작 부분에 0을 저장하여 패딩으로 사용
+    PUT(heap_listp + (1 * WSIZE), PACK(DSIZE, 1)); // 프롤로그 블럭의 헤더에 할당된 상태로 표시하기 위해 사이즈와 할당 비트를 설정하여 값을 저장
+    PUT(heap_listp + (2 * WSIZE), PACK(DSIZE, 1)); // 프롤로그 블록의 풋터에도 마찬가지로 사이즈와 할당 비트를 설정하여 값을 저장
+    PUT(heap_listp + (3 * WSIZE), PACK(0, 1));     // 에필로그 블록의 헤더를 설정하여 힙의 끝을 나타내는 데 사용
+    heap_listp += (2 * WSIZE); // 프롤로그 블록 다음의 첫 번째 바이트를 가리키도록 포인터 조정 
+    find_nextp = heap_listp;   // nextfit을 위한 변수
+
+    if (extend_heap(CHUNKSIZE / WSIZE) == NULL) // 초기 힙을 확장하여 충분한 양의 메모리가 사용 가능하도록 chunksize를 단어 단위로 변환하여 힙 확장
         return -1;
 
     return 0;
@@ -180,20 +176,29 @@ int mm_init(void)
 
 // ----- KJ -----
 
-static void *find_fit(size_t asize)
-{
-    /* First-fit search */
+static void *find_fit(size_t asize){
     void *bp;
-
-    for (bp = heap_listp; GET_SIZE(HDRP(bp)) > 0; bp = NEXT_BLKP(bp))
+    bp = find_nextp;
+    // 현재 블록이 에필로그 블록이 아닌 동안 계속 순회, 블록의 헤더 크기가 0보다 크지 않으면 에필로그 블럭
+    for(;GET_SIZE(HDRP(find_nextp)) > 0; find_nextp = NEXT_BLKP(find_nextp))
     {
-        if (!GET_ALLOC(HDRP(bp)) && (asize <= GET_SIZE(HDRP(bp))))
-        {
-            return bp;
+        // 가용 블럭의 헤더가 할당되어 있지 않고 요청된 크기보다 크거나 같은 경우 해당 가용 블록을 반환
+        if(!GET_ALLOC(HDRP(find_nextp))&& (asize <= GET_SIZE(HDRP(find_nextp))))      
+        { 
+            return find_nextp;
         }
     }
-
-    return NULL; /* No fit */
+    // 위의 for루프에서 가용 블럭을 찾지 못한 경우, 다시 순회
+    for(find_nextp = heap_listp; find_nextp != bp; find_nextp =NEXT_BLKP(find_nextp)) 
+    {   // 이전에 탐색했던 find_nextp 위치에서부터 다시 가용 블록을 찾아서 반환
+        if (!GET_ALLOC(HDRP(find_nextp)) && (asize <= GET_SIZE(HDRP(find_nextp))))
+        {
+            return find_nextp;
+        }
+        
+    }
+    
+    return NULL;
 }
 
 static void place(void *bp, size_t asize)
