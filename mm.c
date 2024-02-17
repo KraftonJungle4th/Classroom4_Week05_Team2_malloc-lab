@@ -8,6 +8,16 @@
  *
  * NOTE TO STUDENTS: Replace this header comment with your own header
  * comment that gives a high level description of your solution.
+ * ----------
+ * mm-naive.c - 가장 빠르고 메모리 효율이 가장 낮은 malloc 패키지입니다.
+ *
+ * 이 순진한 접근 방식에서는 단순히 brk 포인터를 증가시켜 블록을 할당합니다.
+ * 블록은 순수한 페이로드입니다. 헤더나 푸터가 없습니다.
+ * 블록은 합쳐지거나 재사용되지 않습니다.
+ * 재할당은 mm_malloc과 mm_free를 사용해 직접 구현됩니다.
+ *
+ * 학생 참고 사항: 이 헤더 코멘트는 솔루션에 대한 높은 수준의
+ * 설명을 제공하는 자신만의 헤더 코멘트로 대체하세요.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -42,17 +52,15 @@ team_t team = {
 
 #define SIZE_T_SIZE (ALIGN(sizeof(size_t))) // 자료형의 크기를 정렬에 맞게 조정하는 매크로
 
-// ----- KJ -----
-
-#define WSIZE 4 // 워드의 크기를 바이트 단위로 정의
-#define DSIZE 8 // 더블 워드의 크기를 바이트 단위로 정의
+#define WSIZE 4             // 워드의 크기를 바이트 단위로 정의
+#define DSIZE 8             // 더블 워드의 크기를 바이트 단위로 정의
 #define CHUNKSIZE (1 << 12) // 초기 힙 확장에 사용되는 정크 크기를 정의 [2의 12승 (4096)]
 
 /*주어진 두 값 중 큰 값을 반환하는 매크로*/
 #define MAX(x, y) ((x) > (y) ? (x) : (y))
 /*메모리 블록의 크기와 할당 비트를 결합하여 헤더 및 풋터에 저장할 값을 반환하는 매크로*/
 #define PACK(size, alloc) ((size) | (alloc))
- 
+
 /*p가 가리키는 메모리를 unsigned int로 캐스팅한 뒤 해당 위치의 값을 반환
 p가 가리키는 메모리를 unsigned int로 캐스팅한 뒤 해당 위치에 val값을 저장 */
 #define GET(p) (*(unsigned int *)(p))
@@ -73,7 +81,6 @@ p가 가리키는 메모리를 unsigned int로 캐스팅한 뒤 해당 위치에
 #define NEXT_BLKP(bp) ((char *)(bp) + GET_SIZE(((char *)(bp)-WSIZE)))
 #define PREV_BLKP(bp) ((char *)(bp)-GET_SIZE(((char *)(bp)-DSIZE)))
 
-// ----- ** -----
 static void *coalesce(void *bp);           // 주변의 가용 블록을 병합하여 하나의 블록으로 만드는 함수를 선언
 static void *extend_heap(size_t words);    // 힙을 확장하는 함수를 선언
 static void *heap_listp;                   // 가용 리스트의 시작을 나타내는 포인터
@@ -84,7 +91,6 @@ void *mm_malloc(size_t size);              // 주어진 크기의 메모리 블�
 void mm_free(void *ptr);                   // 이전에 할당된 메모리 블록을 해제하는 함수를 선언
 void *mm_realloc(void *ptr, size_t size);  // 이전에 할당된 메모리 블록의 크기를 조정하거나 새로운 위치로 메모리를 이동하는 함수를 선언
 static void *find_nextp;                   // 다음 가용 블록을 탐색하기 위한 포인터 (next_fit)
-// ----- KJ -----
 
 static void *coalesce(void *bp)
 {
@@ -122,10 +128,6 @@ static void *coalesce(void *bp)
     return bp;
 }
 
-// ----- ** -----
-
-// ----- KJ -----
-
 static void *extend_heap(size_t words)
 {
     char *bp;
@@ -143,17 +145,13 @@ static void *extend_heap(size_t words)
     PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1)); // 새 에필로그 헤더
 
     // 인접한 프리 블록과의 병합을 시도하여 메모리 단편화 감소
+    // 코얼레스 (코알라, 코머시기)
     return coalesce(bp);
 }
-
-// ----- ** -----
 
 /*
  * mm_init - initialize the malloc package.
  */
-
-// ----- KJ -----
-
 int mm_init(void)
 {
     if ((heap_listp = mem_sbrk(4 * WSIZE)) == (void *)-1) // 초기 힙 메모리를 할당
@@ -163,8 +161,8 @@ int mm_init(void)
     PUT(heap_listp + (1 * WSIZE), PACK(DSIZE, 1)); // 프롤로그 블럭의 헤더에 할당된 상태로 표시하기 위해 사이즈와 할당 비트를 설정하여 값을 저장
     PUT(heap_listp + (2 * WSIZE), PACK(DSIZE, 1)); // 프롤로그 블록의 풋터에도 마찬가지로 사이즈와 할당 비트를 설정하여 값을 저장
     PUT(heap_listp + (3 * WSIZE), PACK(0, 1));     // 에필로그 블록의 헤더를 설정하여 힙의 끝을 나타내는 데 사용
-    heap_listp += (2 * WSIZE); // 프롤로그 블록 다음의 첫 번째 바이트를 가리키도록 포인터 조정 
-    find_nextp = heap_listp;   // nextfit을 위한 변수
+    heap_listp += (2 * WSIZE);                     // 프롤로그 블록 다음의 첫 번째 바이트를 가리키도록 포인터 조정
+    find_nextp = heap_listp;                       // nextfit을 위한 변수
 
     if (extend_heap(CHUNKSIZE / WSIZE) == NULL) // 초기 힙을 확장하여 충분한 양의 메모리가 사용 가능하도록 chunksize를 단어 단위로 변환하여 힙 확장
         return -1;
@@ -172,51 +170,50 @@ int mm_init(void)
     return 0;
 }
 
-// ----- ** -----
-
-// ----- KJ -----
-
-static void *find_fit(size_t asize){
+static void *find_fit(size_t asize)
+{
+    /* Next-fit search */
     void *bp;
     bp = find_nextp;
     // 현재 블록이 에필로그 블록이 아닌 동안 계속 순회, 블록의 헤더 크기가 0보다 크지 않으면 에필로그 블럭
-    for(;GET_SIZE(HDRP(find_nextp)) > 0; find_nextp = NEXT_BLKP(find_nextp))
+    for (; GET_SIZE(HDRP(find_nextp)) > 0; find_nextp = NEXT_BLKP(find_nextp))
     {
         // 가용 블럭의 헤더가 할당되어 있지 않고 요청된 크기보다 크거나 같은 경우 해당 가용 블록을 반환
-        if(!GET_ALLOC(HDRP(find_nextp))&& (asize <= GET_SIZE(HDRP(find_nextp))))      
-        { 
-            return find_nextp;
-        }
-    }
-    // 위의 for루프에서 가용 블럭을 찾지 못한 경우, 다시 순회
-    for(find_nextp = heap_listp; find_nextp != bp; find_nextp =NEXT_BLKP(find_nextp)) 
-    {   // 이전에 탐색했던 find_nextp 위치에서부터 다시 가용 블록을 찾아서 반환
         if (!GET_ALLOC(HDRP(find_nextp)) && (asize <= GET_SIZE(HDRP(find_nextp))))
         {
             return find_nextp;
         }
-        
     }
-    
+    // 위의 for루프에서 가용 블럭을 찾지 못한 경우, 다시 순회
+    for (find_nextp = heap_listp; find_nextp != bp; find_nextp = NEXT_BLKP(find_nextp))
+    { // 이전에 탐색했던 find_nextp 위치에서부터 다시 가용 블록을 찾아서 반환
+        if (!GET_ALLOC(HDRP(find_nextp)) && (asize <= GET_SIZE(HDRP(find_nextp))))
+        {
+            return find_nextp;
+        }
+    }
+
     return NULL;
 }
 
 static void place(void *bp, size_t asize)
 {
-    size_t csize = GET_SIZE(HDRP(bp));
+    size_t csize = GET_SIZE(HDRP(bp)); // 현재 블록의 크기를 알아냄
 
+    // 남은 공간이 충분히 클 경우, 즉 요청한 크기(asize)와 현재 크기(csize)의 차이가
+    // 두 배의 더블 사이즈(DSIZE)보다 크거나 같으면 블록을 나눔
     if ((csize - asize) >= (2 * DSIZE))
     {
-        PUT(HDRP(bp), PACK(asize, 1));
-        PUT(FTRP(bp), PACK(asize, 1));
-        bp = NEXT_BLKP(bp);
-        PUT(HDRP(bp), PACK(csize - asize, 0));
-        PUT(FTRP(bp), PACK(csize - asize, 0));
+        PUT(HDRP(bp), PACK(asize, 1));         // 사용할 블록의 헤더에 크기와 할당된 상태 저장
+        PUT(FTRP(bp), PACK(asize, 1));         // 사용할 블록의 푸터에도 똑같이 저장
+        bp = NEXT_BLKP(bp);                    // 나머지 블록으로 포인터 이동
+        PUT(HDRP(bp), PACK(csize - asize, 0)); // 나머지 블록의 헤더에 크기와 빈 상태 저장
+        PUT(FTRP(bp), PACK(csize - asize, 0)); // 나머지 블록의 푸터에도 똑같이 저장
     }
-    else
+    else // 남은 공간이 충분히 크지 않으면 현재 블록 전체 사용
     {
-        PUT(HDRP(bp), PACK(csize, 1));
-        PUT(FTRP(bp), PACK(csize, 1));
+        PUT(HDRP(bp), PACK(csize, 1)); // 현재 블록의 헤더에 크기와 할당된 상태 저장
+        PUT(FTRP(bp), PACK(csize, 1)); // 현재 블록의 푸터에도 똑같이 저장
     }
 }
 
@@ -259,11 +256,7 @@ void *mm_malloc(size_t size)
     return bp;
 }
 
-// ----- ** -----
-
-/*
- * mm_free - Freeing a block does nothing.
- */
+// mm_free - 사용하지 않을 블록을 해제합니다.
 void mm_free(void *ptr)
 {
     size_t size = GET_SIZE(HDRP(ptr));
@@ -274,12 +267,7 @@ void mm_free(void *ptr)
     coalesce(ptr);
 }
 
-/*
- * mm_realloc - Implemented simply in terms of mm_malloc and mm_free
- */
-
-// ----- KJ -----
-
+// mm_realloc - mm_malloc 및 mm_free로 간단하게 구현합니다.
 void *mm_realloc(void *ptr, size_t size)
 {
     void *oldptr = ptr;
@@ -307,5 +295,3 @@ void *mm_realloc(void *ptr, size_t size)
 
     return newptr;
 }
-
-// ----- ** -----
