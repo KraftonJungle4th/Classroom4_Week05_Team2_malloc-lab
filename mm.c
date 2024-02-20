@@ -227,37 +227,66 @@ void mm_free(void *ptr)
 
 static void *coalesce(void *bp)
 {
-    size_t prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
-    size_t next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
+    size_t preAlloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
+    size_t nextAlloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
     size_t size = GET_SIZE(HDRP(bp));
+    FreeBlock *prevFree = NULL;
+    FreeBlock *nextFree = NULL;
 
-    if (prev_alloc && next_alloc) /* Case 1 */
+    if (preAlloc && nextAlloc) /* Case 1 */
     {
+        insert_free_block(bp);
         return bp;
     }
 
-    if (prev_alloc && !next_alloc) /* Case 2 */
+    if (preAlloc && !nextAlloc) /* Case 2 */
     {
-        size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
+
+        // nextFreeBlock을 가용리스트에서 삭제
+        nextFree = NEXT_BLKP(bp);
+        remove_free_block(nextFree);
+
+        // 나의 사이즈에 nextFreeBlock의 사이즈 합체
+        size += GET_SIZE(HDRP(nextFree));
+
+        // 나의 헤더, 푸터를 더해진 사이즈로 update
         PUT(HDRP(bp), PACK(size, 0));
         PUT(FTRP(bp), PACK(size, 0));
+
+        // 나를 가용리스트에 추가
+        insert_free_block(bp);
     }
-    else if (!prev_alloc && next_alloc) /* Case 3 */
+    else if (!preAlloc && nextAlloc) /* Case 3 */
     {
+        // 내 앞이 가용리스트에 있어서 가용리스트는 update할 필요 없음
         size += GET_SIZE(HDRP(PREV_BLKP(bp)));
         PUT(FTRP(bp), PACK(size, 0));
         PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
         bp = PREV_BLKP(bp);
     }
-    else /* Case 4 */
+    else /* Case 4 내 앞뒤 모두 가용 블럭*/
     {
+        // 내 앞뒤 free block들의 주소를 받아와서 가용리스트에서 삭제
+        prevFree = PREV_BLKP(bp);
+        nextFree = NEXT_BLKP(bp);
+        remove_free_block(prevFree);
+        remove_free_block(nextFree);
+
+        // 나의 사이즈에, 내 앞뒤 free block들의 사이즈 합체
         size += GET_SIZE(HDRP(PREV_BLKP(bp))) +
                 GET_SIZE(FTRP(NEXT_BLKP(bp)));
+
+        // update된 사이즈를 헤더와 푸터에 반영
         PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
         PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
+
+        // 3 블럭이 더해진 freeBlock의 주소를 맨앞 블럭주소로 update
         bp = PREV_BLKP(bp);
+
+        // 3 블럭이 더해진 freeBlock을 가용리스트에 추가
+        insert_free_block(bp);
     }
-    find_nextp = bp;
+
     return bp;
 }
 
