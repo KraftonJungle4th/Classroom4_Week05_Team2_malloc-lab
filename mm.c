@@ -191,16 +191,26 @@ static void place(void *bp, size_t asize)
     // 두 배의 더블 사이즈(DSIZE)보다 크거나 같으면 블록을 나눔
     if ((csize - asize) >= (2 * DSIZE))
     {
-        PUT(HDRP(bp), PACK(asize, 1));         // 사용할 블록의 헤더에 크기와 할당된 상태 저장
-        PUT(FTRP(bp), PACK(asize, 1));         // 사용할 블록의 푸터에도 똑같이 저장
+        PUT(HDRP(bp), PACK(asize, 1)); // 사용할 블록의 헤더에 크기와 할당된 상태 저장
+        PUT(FTRP(bp), PACK(asize, 1)); // 사용할 블록의 푸터에도 똑같이 저장
+
+        // allocate된 주소는 freeList에서 삭제
+        remove_free_block(bp);
+
         bp = NEXT_BLKP(bp);                    // 나머지 블록으로 포인터 이동
         PUT(HDRP(bp), PACK(csize - asize, 0)); // 나머지 블록의 헤더에 크기와 빈 상태 저장
         PUT(FTRP(bp), PACK(csize - asize, 0)); // 나머지 블록의 푸터에도 똑같이 저장
+
+        // split된 block은 freeList에 추가
+        insert_free_block(bp);
     }
     else // 남은 공간이 충분히 크지 않으면 현재 블록 전체 사용
     {
         PUT(HDRP(bp), PACK(csize, 1)); // 현재 블록의 헤더에 크기와 할당된 상태 저장
         PUT(FTRP(bp), PACK(csize, 1)); // 현재 블록의 푸터에도 똑같이 저장
+
+        // allocate된 주소는 freeList에서 삭제
+        remove_free_block(bp);
     }
 }
 
