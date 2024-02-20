@@ -166,24 +166,17 @@ void *mm_malloc(size_t size)
 
 static void *find_fit(size_t asize)
 {
-    /* Next-fit search */
-    void *bp;
-    bp = find_nextp;
-    // 현재 블록이 에필로그 블록이 아닌 동안 계속 순회, 블록의 헤더 크기가 0보다 크지 않으면 에필로그 블럭
-    for (; GET_SIZE(HDRP(find_nextp)) > 0; find_nextp = NEXT_BLKP(find_nextp))
+    /* Explicit & First-fit search */
+    FreeBlock *freeBlock;
+    freeBlock = freeListRoot->next;
+
+    // 가용 블럭의 next가 NULL이 아닌 동안 순회
+    for (; freeBlock->next != NULL; freeBlock = freeBlock->next)
     {
-        // 가용 블럭의 헤더가 할당되어 있지 않고 요청된 크기보다 크거나 같은 경우 해당 가용 블록을 반환
-        if (!GET_ALLOC(HDRP(find_nextp)) && (asize <= GET_SIZE(HDRP(find_nextp))))
+        // 가용 블럭의 사이즈가 필요 사이즈와 같거나 크면 해당 블럭 주소 반환
+        if (freeBlock->size >= asize)
         {
-            return find_nextp;
-        }
-    }
-    // 위의 for루프에서 가용 블럭을 찾지 못한 경우, 다시 순회
-    for (find_nextp = heap_listp; find_nextp != bp; find_nextp = NEXT_BLKP(find_nextp))
-    { // 이전에 탐색했던 find_nextp 위치에서부터 다시 가용 블록을 찾아서 반환
-        if (!GET_ALLOC(HDRP(find_nextp)) && (asize <= GET_SIZE(HDRP(find_nextp))))
-        {
-            return find_nextp;
+            return freeBlock;
         }
     }
 
