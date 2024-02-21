@@ -166,7 +166,8 @@ int mm_init(void)
 
     if (extend_heap(CHUNKSIZE / WSIZE) == NULL) // 초기 힙을 확장하여 충분한 양의 메모리가 사용 가능하도록 chunksize를 단어 단위로 변환하여 힙 확장
         return -1;
-
+    if (extend_heap(4) == NULL)                  //자주 사용되는 작은 블럭이 잘 처리되어 점수가 오름
+        return -1;
     return 0;
 }
 
