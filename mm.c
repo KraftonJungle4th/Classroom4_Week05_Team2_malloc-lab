@@ -104,7 +104,7 @@ int mm_init(void)
     PUT(heap_listp + ((SEGREGATED_SIZE + 2) * WSIZE), PACK((SEGREGATED_SIZE + 2) * WSIZE, 1)); // 프롤로그 Footer
     PUT(heap_listp + ((SEGREGATED_SIZE + 3) * WSIZE), PACK(0, 1));                             // 에필로그 Header: 프로그램이 할당한 마지막 블록의 뒤에 위치
     heap_listp += (2 * WSIZE);
-    if (extend_heap(4) == NULL)                  //자주 사용되는 작은 블럭이 잘 처리되어 점수가 오름
+    if (extend_heap(4) == NULL)                  //자주 사용되는 작은 블럭이 잘 처리되어 점수가 오름!!
         return -1;
     if (extend_heap(CHUNKSIZE / WSIZE) == NULL)
         return -1;
