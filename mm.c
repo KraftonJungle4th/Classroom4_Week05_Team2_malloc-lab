@@ -81,25 +81,41 @@ p가 가리키는 메모리를 unsigned int로 캐스팅한 뒤 해당 위치에
 #define NEXT_BLKP(bp) ((char *)(bp) + GET_SIZE(((char *)(bp)-WSIZE)))
 #define PREV_BLKP(bp) ((char *)(bp)-GET_SIZE(((char *)(bp)-DSIZE)))
 
-static void *coalesce(void *bp);           // 주변의 가용 블록을 병합하여 하나의 블록으로 만드는 함수를 선언
-static void *extend_heap(size_t words);    // 힙을 확장하는 함수를 선언
-static void *heap_listp;                   // 가용 리스트의 시작을 나타내는 포인터
-int mm_init(void);                         // 메모리 할당 시스템을 초기화하는 함수를 선언
-static void *find_fit(size_t asize);       // 요청된 크기에 맞는 가용 블록을 탐색하는 함수를 선언
-static void place(void *bp, size_t aszie); // 할당된 메모리 블록을 가용 리스트에서 제거하고 요청된 크기로 분할하는 함수를 선언
-void *mm_malloc(size_t size);              // 주어진 크기의 메모리 블록을 할당하는 함수를 선언
-void mm_free(void *ptr);                   // 이전에 할당된 메모리 블록을 해제하는 함수를 선언
-void *mm_realloc(void *ptr, size_t size);  // 이전에 할당된 메모리 블록의 크기를 조정하거나 새로운 위치로 메모리를 이동하는 함수를 선언
-static void *find_nextp;                   // 다음 가용 블록을 탐색하기 위한 포인터 (next_fit)
+/*
+가용 리스트 내의 현재 블럭에서 prev와 next 가용 블럭의 주소 찾기
+가용 리스트의 각 블럭 노드는, word단위로 prev와 next가 저장되어있다는 가정
+가용 리스트 내의 블럭들은 heap 리스트 내의 포인터를 가리키기 때문에 이중 포인터이며,
+byte단위로 주소값을 저장하기 때문에 char 타입으로 읽어옴
+*/
+#define GET_FREE_PREV(bp) (*(void **)((char *)(bp)))
+#define GET_FREE_NEXT(bp) (*(void **)((char *)(bp) + WSIZE))
 
+/*
+가용 리스트 내의 prev와 next 블럭이 포인팅하고 있는 주소값을
+주어진 pp, np로 교체하기
+*/
+#define SET_FREE_PREV(bp, pp) (GET_FREE_PREV(bp) = (pp))
+#define SET_FREE_NEXT(bp, np) (GET_FREE_NEXT(bp) = (np))
+
+static void *heap_listp; // 가용 리스트의 시작을 나타내는 포인터
 typedef struct freeBlock
 {
     size_t size;
     struct freeBlock *prev;
     struct freeBlock *next;
 } FreeBlock;
-
 FreeBlock *freeListRoot;
+
+int mm_init(void);                                   // 메모리 할당 시스템을 초기화하는 함수를 선언
+void *mm_malloc(size_t size);                        // 주어진 크기의 메모리 블록을 할당하는 함수를 선언
+static void *find_fit(size_t asize);                 // 요청된 크기에 맞는 가용 블록을 탐색하는 함수를 선언
+static void place(void *bp, size_t aszie);           // 할당된 메모리 블록을 가용 리스트에서 제거하고 요청된 크기로 분할하는 함수를 선언
+void mm_free(void *ptr);                             // 이전에 할당된 메모리 블록을 해제하는 함수를 선언
+static void *coalesce(void *bp);                     // 주변의 가용 블록을 병합하여 하나의 블록으로 만드는 함수를 선언
+static void remove_free_block(FreeBlock *currBlock); // 가용리스트에서 요청 블럭을 삭제하기
+static void insert_free_block(FreeBlock *newBlock);  // 가용리스트에 요청 블럭을 추가하기
+static void *extend_heap(size_t words);              // 힙을 확장하는 함수를 선언
+void *mm_realloc(void *ptr, size_t size);            // 이전에 할당된 메모리 블록의 크기를 조정하거나 새로운 위치로 메모리를 이동하는 함수를 선언
 
 /*
  * mm_init - initialize the malloc package.
@@ -116,8 +132,12 @@ int mm_init(void)
     PUT(heap_listp + (3 * WSIZE), PACK(0, 1));     // 에필로그 블록의 헤더를 설정하여 힙의 끝을 나타내는 데 사용
     heap_listp += (2 * WSIZE);                     // 프롤로그 블록 다음의 첫 번째 바이트를 가리키도록 포인터 조정
 
-    find_nextp = heap_listp; // nextfit을 위한 변수
-    freeListRoot = NULL;     // explicit free list의 root pointer 초기화
+    // explicit free list의 root pointer 초기화
+    if ((freeListRoot = mem_sbrk(sizeof(FreeBlock))) == (void *)-1)
+        return -1;
+
+    freeListRoot->prev = NULL;
+    freeListRoot->next = NULL;
 
     if (extend_heap(CHUNKSIZE / WSIZE) == NULL) // 초기 힙을 확장하여 충분한 양의 메모리가 사용 가능하도록 chunksize를 단어 단위로 변환하여 힙 확장
         return -1;
@@ -169,6 +189,11 @@ static void *find_fit(size_t asize)
     /* Explicit & First-fit search */
     FreeBlock *freeBlock;
     freeBlock = freeListRoot->next;
+
+    if (freeListRoot == NULL || freeBlock == NULL)
+    {
+        return NULL;
+    }
 
     // 가용 블럭의 next가 NULL이 아닌 동안 순회
     for (; freeBlock->next != NULL; freeBlock = freeBlock->next)
@@ -290,24 +315,33 @@ static void *coalesce(void *bp)
     return bp;
 }
 
-static void *remove_free_block(void *curr)
+static void remove_free_block(FreeBlock *currBlock)
 {
-    FreeBlock *currBlock = curr;
-    FreeBlock *prevBlock = currBlock->prev;
-    FreeBlock *nextBlock = currBlock->next;
+    FreeBlock *prevBlock = GET_FREE_PREV(currBlock);
+    FreeBlock *nextBlock = GET_FREE_NEXT(currBlock);
 
-    prevBlock->next = nextBlock;
-    nextBlock->prev = prevBlock;
+    if (prevBlock)
+    {
+        SET_FREE_NEXT(prevBlock, nextBlock);
+    }
+    if (nextBlock)
+    {
+        SET_FREE_PREV(nextBlock, prevBlock);
+    }
 }
 
-static void *insert_free_block(void *newBlock)
+static void insert_free_block(FreeBlock *newHeadBlock)
 {
-    FreeBlock *newHeadBlock = newBlock;
-    FreeBlock *oldHeadBlock = freeListRoot->next;
+    FreeBlock *oldHeadBlock = GET_FREE_NEXT(freeListRoot);
+    SET_FREE_NEXT(newHeadBlock, oldHeadBlock);
 
-    oldHeadBlock->prev = newHeadBlock;
-    newHeadBlock->next = oldHeadBlock;
-    freeListRoot->next = newHeadBlock;
+    if (oldHeadBlock != NULL)
+    {
+        SET_FREE_PREV(oldHeadBlock, newHeadBlock);
+    }
+
+    SET_FREE_NEXT(freeListRoot, newHeadBlock);
+    SET_FREE_PREV(newHeadBlock, NULL);
 }
 
 static void *extend_heap(size_t words)
